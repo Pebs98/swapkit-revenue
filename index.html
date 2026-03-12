@@ -132,6 +132,7 @@ tbody tr:hover { background: rgba(240,136,62,0.05); }
   <div class="tab" data-tab="outflows">Wallet Outflows</div>
   <div class="tab" data-tab="addresses">Notable Addresses</div>
   <div class="tab" data-tab="sources">Inflow Sources</div>
+  <div class="tab" data-tab="cashout">Cash-Out Analysis</div>
   <div class="tab" data-tab="estimates">Estimates vs Actual</div>
 </div>
 
@@ -186,6 +187,37 @@ tbody tr:hover { background: rgba(240,136,62,0.05); }
       <thead>
         <tr>
           <th>Source Address</th><th>Label</th><th>Total USDC</th><th>% of Inflows</th><th>Identified?</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Cash-Out Analysis -->
+<div class="tab-content" id="tab-cashout">
+  <h3>Cash-Out Flow: Revenue Wallet → Kraken</h3>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+    All identified outflows from the primary revenue wallet ultimately route to Kraken exchange deposit addresses
+    via intermediary EOA <a href="https://etherscan.io/address/0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4" target="_blank" style="color:var(--blue)">0x8213...2e4</a>.
+    Two additional wallets also feed USDC into the same intermediary, suggesting revenue collection beyond the primary <code>-_</code> wallet.
+  </p>
+  <div class="table-wrap">
+    <table id="cashoutTable">
+      <thead>
+        <tr>
+          <th>Source</th><th>Label</th><th>USDC to Intermediary</th><th>Key Traits</th><th>Revenue Link</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <h3 style="margin-top:24px">Intermediary → Kraken Destinations</h3>
+  <div class="table-wrap">
+    <table id="krakenTable">
+      <thead>
+        <tr>
+          <th>Kraken Wallet</th><th>Label</th><th>Token</th><th>Period</th><th>Est. Total</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -264,11 +296,11 @@ const DATA = {
     { month: "2026-03", usdcIn: 566239, usdcOut: 0, thorchain: 0, chainflip: 0, other: 566239, inTxs: 0 }
   ],
   outflows: [
-    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Unlabeled EOA (funded from Kraken)", total: 2711322, txs: 33, pct: 85.3, type: "Cash-out" },
+    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Cash-out EOA → Kraken", total: 2711322, txs: 33, pct: 85.3, type: "Cash-out" },
     { address: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", label: "LI.FI Diamond", total: 103584, txs: 2, pct: 3.3, type: "DEX Aggregator" },
     { address: "0x78c365c87fa724fe551b48ce472d832f9fb3c421", label: "Unlabeled", total: 96920, txs: 1, pct: 3.0, type: "Transfer" },
     { address: "0x255Ba52b374c4Cf14b36966Bf53A8a89ae615CEf", label: "Unlabeled", total: 57500, txs: 4, pct: 1.8, type: "Transfer" },
-    { address: "0xC2C5E719B2fAe1C0560D4deea738F27574bFfD91", label: "Unlabeled", total: 50516, txs: 1, pct: 1.6, type: "Transfer" },
+    { address: "0xC2C5E719B2fAe1C0560D4deea738F27574bFfD91", label: "Secondary relay wallet (THORSwap-linked)", total: 50516, txs: 1, pct: 1.6, type: "Transfer" },
     { address: "0xcc16b97C3516e5600445921C23a0d50e41b96E2d", label: "Unlabeled", total: 50000, txs: 1, pct: 1.6, type: "Transfer" },
     { address: "0xd59dE8dCDC2101F7b1A69d3107D3AfEd1542212A", label: "Unlabeled", total: 22950, txs: 2, pct: 0.7, type: "Transfer" },
     { address: "0xC0af13c49EB2616455469b00B7bdD1A64AcA1A6f", label: "Unlabeled", total: 16000, txs: 1, pct: 0.5, type: "Transfer" },
@@ -298,8 +330,13 @@ const DATA = {
     { address: "0xD0bDf7397C6E90879Bf1a409714D1CFEe597D121", label: "SafeProxy (unknown)", direction: "Inflow", total: 540603, pct: 16.3, notes: "Multi-sig holding $632K USDC. Fed by 2 addresses. Not publicly labeled." },
     { address: "0x92f980a7aaE3574cfE45E30A21D6aa14D08f7c7D", label: "SafeProxy (unknown)", direction: "Inflow", total: 490891, pct: 14.8, notes: "Multi-sig holding $3.09M. Not publicly labeled." },
     { address: "0xa4c737F10010A80cC05112523663b5C7fc97Ab39", label: "Unlabeled EOA", direction: "Inflow", total: 444044, pct: 13.4, notes: "High-activity EOA. Source of funds unverified." },
-    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Primary cash-out EOA", direction: "Outflow", total: 2711322, pct: 85.3, notes: "85% of all outflows. Funded from Kraken. 7 ETH txs. Likely team/founder wallet." },
+    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Primary cash-out EOA", direction: "Outflow", total: 2711322, pct: 85.3, notes: "85% of all outflows. Initially funded from Kraken. Pure pass-through: 100% forwarded to Kraken deposit addresses (Kraken 10, Hot Wallet 4). ~$2.85M total throughput. Zero DeFi activity." },
     { address: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", label: "LI.FI Diamond", direction: "Outflow", total: 103584, pct: 3.3, notes: "DEX aggregator contract. Possibly operational swaps." },
+    { address: "0xc2c5e719b2fae1c0560d4deea738f27574bffd91", label: "Secondary revenue relay", direction: "Related", total: 78000, pct: 0, notes: "252 txs. Receives batch USDC via Disperse.app. Also funded by EOA linked to THORSwap Deployer (0x8aa6bd..., holds 226K vTHOR). Sends ~$78K USDC to cash-out EOA. Holds 399 FLIP. Multichain (ETH, AVAX, Polygon, BSC, Base)." },
+    { address: "0xc8908c67b343a10dc4ad8af0922d02e4f0ad699c", label: "DeFi-active feeder wallet", direction: "Related", total: 107000, pct: 0, notes: "310 txs. Heavy Aave V3 user — deposits WBTC/WETH as collateral, borrows USDC. Receives WBTC directly from THORChain Router. Sends ~$107K USDC to cash-out EOA. Early THOR token activity (~54K THOR, SushiSwap LP)." },
+    { address: "0x8aa6bd052ded600ae69524da47016aa712eb92a6", label: "THORSwap-linked EOA", direction: "Related", total: 19000, pct: 0, notes: "Funded by THORSwap: Deployer (per Etherscan). Holds 226K vTHOR. 401 txs. Sends USDC to 0xc2c5... relay wallet." },
+    { address: "0xAe2D4617c862309A3d75A0fFB358c7a5009c673F", label: "Kraken 10", direction: "Related", total: 0, pct: 0, notes: "Publicly labeled Kraken hot wallet. Destination for ~$1.6M USDC from cash-out EOA (Feb 2024 – May 2025). Also provided initial gas funding." },
+    { address: "0x05ff6964D21e5dAE3b1010D5AE0465b3c450F381", label: "Kraken: Hot Wallet 4", direction: "Related", total: 0, pct: 0, notes: "Publicly labeled Kraken hot wallet. Destination for ~$500K USDC from cash-out EOA (Sep 2025 – Feb 2026). Holds ~$226M." },
     { address: "0x6d1eff1aFF1dc9978d851D09d9d15f2938Da7BD7", label: "TSFeeDistributor_V5", direction: "Related", total: 0, pct: 0, notes: "THORSwap fee distributor. THORName 't' shares BTC address with '-_'. Same entity." },
     { address: "0x90A48D5CF7343B08dA12E067680B4C6dbfE551Be", label: "ShapeShift DAO Treasury", direction: "Related", total: 0, pct: 0, notes: "THORName 'ss'. NOT SwapKit (initially suspected)." }
   ],
@@ -316,7 +353,7 @@ const DATA = {
     { severity: "high", text: "<strong>THORChain Router revenue collapsed:</strong> $260K/month (Mar 2025) to $25K/month (Dec 2025) — 90% decline. Replaced by unidentified SafeProxy sources." },
     { severity: "high", text: "<strong>52.7% of inflows from unidentified sources:</strong> Two SafeProxy multi-sigs and an unlabeled EOA provide the majority of revenue. Cannot verify these are protocol fees vs. treasury transfers." },
     { severity: "high", text: "<strong>Nov 2025 actual = 39% of 10bps estimate:</strong> Self-reported $725M volume implies $725K revenue at 10bps, but only $285K arrived onchain. Suggests volume inflation, double-counting, or much lower effective fee rate." },
-    { severity: "medium", text: "<strong>85% of outflows to single Kraken-funded EOA:</strong> Indicates centralized cash extraction to likely one individual. No visible treasury diversification or operational reserves." },
+    { severity: "medium", text: "<strong>85% of outflows to single Kraken-funded EOA:</strong> All outflows route through one intermediary to Kraken deposit addresses (~$2.85M total). Two additional feeder wallets (0xc2c5..., 0xc890...) also send USDC to the same EOA — one linked to THORSwap Deployer, one active on Aave V3 with THORChain Router inflows." },
     { severity: "medium", text: "<strong>ETH mainnet USDC only:</strong> This analysis does not capture BTC affiliate payouts, direct ETH received (~34 ETH from Chainflip), or any revenue on Arbitrum, Solana, or other chains. Actual revenue could be higher." },
     { severity: "medium", text: "<strong>Dec 2025 spike ($768K) anomalous:</strong> $733K from unknown SafeProxy in single month — could be accumulated fees released in batch rather than steady revenue." },
     { severity: "low", text: "<strong>THORChain/NK exposure:</strong> THORChain has been cited for facilitating North Korean fund laundering to boost TVL. SwapKit is a major THORChain affiliate — reputational and regulatory risk." },
@@ -375,7 +412,7 @@ function renderStats() {
   const avgIn = totalIn / months;
   const html = `
     <div class="stat-card"><div class="label">Total USDC Inflows</div><div class="value green">${fmtFull(totalIn)}</div><div class="detail">${months} months tracked (Nov 2024 – present)</div></div>
-    <div class="stat-card"><div class="label">Total USDC Outflows</div><div class="value red">${fmtFull(totalOut)}</div><div class="detail">85.3% to single Kraken-funded EOA</div></div>
+    <div class="stat-card"><div class="label">Total USDC Outflows</div><div class="value red">${fmtFull(totalOut)}</div><div class="detail">85% via intermediary EOA → Kraken</div></div>
     <div class="stat-card"><div class="label">Current USDC Balance</div><div class="value accent">${fmtFull(DATA.currentBalance)}</div><div class="detail">Net retained in wallet</div></div>
     <div class="stat-card"><div class="label">Monthly Average Inflow</div><div class="value blue">${fmtFull(Math.round(avgIn))}</div><div class="detail">Median: ${fmtFull(DATA.monthly.map(m=>m.usdcIn).sort((a,b)=>a-b)[Math.floor(months/2)])}</div></div>
   `;
@@ -576,6 +613,54 @@ function renderEstimates() {
   tbody.innerHTML = html;
 }
 
+// Cash-Out Analysis
+function renderCashout() {
+  const sources = [
+    { address: "0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4", label: "SwapKit Revenue Wallet (-_)", total: 1740000, traits: "THORName -_ | Primary affiliate fee collection | THORChain Router + Chainflip + SafeProxy inflows", link: "Direct USDC transfers from revenue wallet" },
+    { address: "0xc2c5e719b2fae1c0560d4deea738f27574bffd91", label: "Secondary relay wallet", total: 78000, traits: "252 txs | Disperse.app batch payouts | Funded by THORSwap Deployer-linked EOA | Holds 399 FLIP | Multichain", link: "Batch revenue distributions via Disperse.app; THORSwap Deployer connection" },
+    { address: "0xc8908c67b343a10dc4ad8af0922d02e4f0ad699c", label: "DeFi-active feeder wallet", total: 107000, traits: "310 txs | Heavy Aave V3 (WBTC/WETH collateral → borrow USDC) | Receives WBTC from THORChain Router | Early THOR holder (~54K)", link: "THORChain Router WBTC inflows; borrows USDC against DeFi positions" },
+  ];
+  const tbody = document.querySelector('#cashoutTable tbody');
+  let html = '';
+  sources.forEach(s => {
+    html += `<tr>
+      <td class="addr">${etherscanLink(s.address)}</td>
+      <td>${s.label}</td>
+      <td class="num pos">${fmtFull(s.total)}</td>
+      <td style="white-space:normal;max-width:300px;font-size:11px">${s.traits}</td>
+      <td style="white-space:normal;max-width:250px;font-size:11px">${s.link}</td>
+    </tr>`;
+  });
+  html += `<tr style="font-weight:700;background:var(--surface)">
+    <td colspan="2">TOTAL TO INTERMEDIARY</td>
+    <td class="num pos">${fmtFull(1740000 + 78000 + 107000)}</td>
+    <td colspan="2" style="font-size:11px">→ 100% forwarded to Kraken deposit addresses</td>
+  </tr>`;
+  tbody.innerHTML = html;
+
+  const kraken = [
+    { address: "0xAe2D4617c862309A3d75A0fFB358c7a5009c673F", label: "Kraken 10", token: "USDC", period: "Feb 2024 – May 2025", total: 1600000 },
+    { address: "0x05ff6964D21e5dAE3b1010D5AE0465b3c450F381", label: "Kraken: Hot Wallet 4", token: "USDC", period: "Sep 2025 – Feb 2026", total: 500000 },
+    { address: "0x89e51fA8CA5D66cd220bAed62ED01e8951aa7c40", label: "Kraken 7", token: "USDT", period: "Jul & Dec 2024", total: 148000 },
+  ];
+  const ktbody = document.querySelector('#krakenTable tbody');
+  let khtml = '';
+  kraken.forEach(k => {
+    khtml += `<tr>
+      <td class="addr">${etherscanLink(k.address)}</td>
+      <td>${k.label}</td>
+      <td>${k.token}</td>
+      <td>${k.period}</td>
+      <td class="num">${fmtFull(k.total)}</td>
+    </tr>`;
+  });
+  khtml += `<tr style="font-weight:700;background:var(--surface)">
+    <td colspan="4">TOTAL TO KRAKEN</td>
+    <td class="num">${fmtFull(2248000)}</td>
+  </tr>`;
+  ktbody.innerHTML = khtml;
+}
+
 // Risk Flags
 function renderRisks() {
   const el = document.getElementById('riskFlags');
@@ -630,6 +715,7 @@ renderMonthly();
 renderOutflows();
 renderSources();
 renderAddresses();
+renderCashout();
 renderEstimates();
 renderRisks();
 window.addEventListener('resize', renderChart);
