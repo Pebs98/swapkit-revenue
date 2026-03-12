@@ -1,0 +1,248 @@
+name: Update SwapKit Revenue Data
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch and update data
+        run: |
+          python3 << 'PYEOF'
+          import urllib.request
+          import json
+          import datetime
+          import re
+          import time
+
+          WALLET = "0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4"
+          USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          THORCHAIN_ROUTER = "0xd37bbe5744d730a1d98d8dc97c42f0ca46ad7146"
+          CHAINFLIP = "0xf5e10380213880111522dd0efd3dbb45b9f62bcc"
+          BASE_URL = "https://eth.blockscout.com/api"
+
+          def fetch_json(url, retries=3):
+              for i in range(retries):
+                  try:
+                      req = urllib.request.Request(url, headers={"User-Agent": "SwapKitDD/1.0"})
+                      resp = urllib.request.urlopen(req, timeout=30)
+                      return json.loads(resp.read())
+                  except Exception as e:
+                      if i < retries - 1:
+                          time.sleep(2 ** i)
+                      else:
+                          print(f"Failed to fetch {url}: {e}")
+                          return None
+
+          # Fetch all USDC token transfers (paginated)
+          all_txs = []
+          for page in range(1, 20):
+              url = f"{BASE_URL}?module=account&action=tokentx&address={WALLET}&contractaddress={USDC}&page={page}&offset=1000&sort=desc"
+              data = fetch_json(url)
+              if not data or data.get("status") != "1":
+                  break
+              txs = data["result"]
+              if not txs:
+                  break
+              all_txs.extend(txs)
+              print(f"Page {page}: {len(txs)} txs")
+              if len(txs) < 1000:
+                  break
+              time.sleep(0.5)
+
+          print(f"Total transactions fetched: {len(all_txs)}")
+
+          # Deduplicate
+          seen = set()
+          unique = []
+          for tx in all_txs:
+              key = tx["hash"] + tx["from"] + tx["to"] + tx["value"]
+              if key not in seen:
+                  seen.add(key)
+                  unique.append(tx)
+
+          target = WALLET.lower()
+
+          # Monthly aggregation
+          monthly = {}
+          source_totals = {}
+          dest_totals = {}
+          dest_counts = {}
+          source_counts = {}
+
+          for tx in unique:
+              amount = int(tx["value"]) / 1e6
+              if amount == 0:
+                  continue
+              dt = datetime.datetime.fromtimestamp(int(tx["timeStamp"]))
+              mk = dt.strftime("%Y-%m")
+              is_in = tx["to"].lower() == target
+
+              if mk not in monthly:
+                  monthly[mk] = {"usdcIn": 0, "usdcOut": 0, "thorchain": 0, "chainflip": 0, "other": 0, "inTxs": 0}
+
+              if is_in:
+                  monthly[mk]["usdcIn"] += amount
+                  monthly[mk]["inTxs"] += 1
+                  src = tx["from"].lower()
+                  source_totals[src] = source_totals.get(src, 0) + amount
+                  source_counts[src] = source_counts.get(src, 0) + 1
+                  if src == THORCHAIN_ROUTER:
+                      monthly[mk]["thorchain"] += amount
+                  elif src == CHAINFLIP:
+                      monthly[mk]["chainflip"] += amount
+                  else:
+                      monthly[mk]["other"] += amount
+              else:
+                  monthly[mk]["usdcOut"] += amount
+                  dst = tx["to"].lower()
+                  dest_totals[dst] = dest_totals.get(dst, 0) + amount
+                  dest_counts[dst] = dest_counts.get(dst, 0) + 1
+
+          # Sort months
+          sorted_months = sorted(monthly.keys())
+          monthly_list = []
+          for m in sorted_months:
+              d = monthly[m]
+              monthly_list.append({
+                  "month": m,
+                  "usdcIn": round(d["usdcIn"]),
+                  "usdcOut": round(d["usdcOut"]),
+                  "thorchain": round(d["thorchain"]),
+                  "chainflip": round(d["chainflip"]),
+                  "other": round(d["other"]),
+                  "inTxs": d["inTxs"]
+              })
+
+          # Inflow sources
+          total_in = sum(source_totals.values())
+          inflows = []
+          known_labels = {
+              THORCHAIN_ROUTER: "THORChain Router v4.1.1",
+              CHAINFLIP: "Chainflip 1",
+              "0xd0bdf7397c6e90879bf1a409714d1cfee597d121": "SafeProxy (unlabeled multi-sig)",
+              "0x92f980a7aae3574cfe45e30a21d6aa14d08f7c7d": "SafeProxy (unlabeled multi-sig)",
+              "0xa4c737f10010a80cc05112523663b5c7fc97ab39": "Unlabeled EOA (high activity)",
+              "0x2cff890f0378a11913b6129b2e97417a2c302680": "Unlabeled EOA",
+          }
+          identified = {THORCHAIN_ROUTER, CHAINFLIP}
+
+          for addr, total in sorted(source_totals.items(), key=lambda x: -x[1])[:12]:
+              pct = total / total_in * 100 if total_in else 0
+              inflows.append({
+                  "address": addr,
+                  "label": known_labels.get(addr, "Unlabeled"),
+                  "total": round(total),
+                  "pct": round(pct, 1),
+                  "identified": addr in identified
+              })
+
+          # Outflow destinations
+          total_out = sum(dest_totals.values())
+          known_out_labels = {
+              "0x82137fbeb0cf695b6da983064d4f2d7f7c6ee2e4": "Unlabeled EOA (funded from Kraken)",
+              "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae": "LI.FI Diamond",
+          }
+          known_out_types = {
+              "0x82137fbeb0cf695b6da983064d4f2d7f7c6ee2e4": "Cash-out",
+              "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae": "DEX Aggregator",
+          }
+          outflows = []
+          for addr, total in sorted(dest_totals.items(), key=lambda x: -x[1])[:15]:
+              pct = total / total_out * 100 if total_out else 0
+              outflows.append({
+                  "address": addr,
+                  "label": known_out_labels.get(addr, "Unlabeled"),
+                  "total": round(total),
+                  "txs": dest_counts.get(addr, 0),
+                  "pct": round(pct, 1),
+                  "type": known_out_types.get(addr, "Transfer")
+              })
+
+          # Fetch current balance
+          balance_url = f"{BASE_URL}?module=account&action=tokenbalance&contractaddress={USDC}&address={WALLET}"
+          bal_data = fetch_json(balance_url)
+          current_balance = 0
+          if bal_data and bal_data.get("status") == "1":
+              current_balance = round(int(bal_data["result"]) / 1e6)
+
+          # Build DATA object
+          today = datetime.date.today().isoformat()
+          new_data = {
+              "lastUpdated": today,
+              "wallet": WALLET,
+              "thorname": "-_",
+              "currentBalance": current_balance,
+              "totalTxs": len(unique),
+              "monthly": monthly_list,
+              "outflows": outflows,
+              "inflows": inflows,
+              "addresses": [
+                  {"address": WALLET, "label": "SwapKit Revenue Wallet", "direction": "Subject", "total": round(total_in), "pct": 100, "notes": "THORName: -_ | Preferred asset: USDC | ETH alias"},
+                  {"address": "0xD37BbE5744D730a1d98d8DC97c42F0Ca46aD7146", "label": "THORChain Router v4.1.1", "direction": "Inflow", "total": round(source_totals.get(THORCHAIN_ROUTER, 0)), "pct": round(source_totals.get(THORCHAIN_ROUTER, 0) / total_in * 100, 1) if total_in else 0, "notes": "Confirmed affiliate fee payouts in USDC"},
+                  {"address": "0xF5e10380213880111522dd0efD3dbb45b9f62bcc", "label": "Chainflip 1", "direction": "Inflow", "total": round(source_totals.get(CHAINFLIP, 0)), "pct": round(source_totals.get(CHAINFLIP, 0) / total_in * 100, 1) if total_in else 0, "notes": "Chainflip broker fee payouts"},
+                  {"address": "0xD0bDf7397C6E90879Bf1a409714D1CFEe597D121", "label": "SafeProxy (unknown)", "direction": "Inflow", "total": round(source_totals.get("0xd0bdf7397c6e90879bf1a409714d1cfee597d121", 0)), "pct": round(source_totals.get("0xd0bdf7397c6e90879bf1a409714d1cfee597d121", 0) / total_in * 100, 1) if total_in else 0, "notes": "Multi-sig. Not publicly labeled."},
+                  {"address": "0x92f980a7aaE3574cfE45E30A21D6aa14D08f7c7D", "label": "SafeProxy (unknown)", "direction": "Inflow", "total": round(source_totals.get("0x92f980a7aae3574cfe45e30a21d6aa14d08f7c7d", 0)), "pct": round(source_totals.get("0x92f980a7aae3574cfe45e30a21d6aa14d08f7c7d", 0) / total_in * 100, 1) if total_in else 0, "notes": "Multi-sig holding $3.09M. Not publicly labeled."},
+                  {"address": "0xa4c737F10010A80cC05112523663b5C7fc97Ab39", "label": "Unlabeled EOA", "direction": "Inflow", "total": round(source_totals.get("0xa4c737f10010a80cc05112523663b5c7fc97ab39", 0)), "pct": round(source_totals.get("0xa4c737f10010a80cc05112523663b5c7fc97ab39", 0) / total_in * 100, 1) if total_in else 0, "notes": "High-activity EOA. Source of funds unverified."},
+                  {"address": "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", "label": "Primary cash-out EOA", "direction": "Outflow", "total": round(dest_totals.get("0x82137fbeb0cf695b6da983064d4f2d7f7c6ee2e4", 0)), "pct": round(dest_totals.get("0x82137fbeb0cf695b6da983064d4f2d7f7c6ee2e4", 0) / total_out * 100, 1) if total_out else 0, "notes": "85%+ of all outflows. Funded from Kraken. Likely team/founder wallet."},
+                  {"address": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", "label": "LI.FI Diamond", "direction": "Outflow", "total": round(dest_totals.get("0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae", 0)), "pct": round(dest_totals.get("0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae", 0) / total_out * 100, 1) if total_out else 0, "notes": "DEX aggregator contract. Possibly operational swaps."},
+                  {"address": "0x6d1eff1aFF1dc9978d851D09d9d15f2938Da7BD7", "label": "TSFeeDistributor_V5", "direction": "Related", "total": 0, "pct": 0, "notes": "THORSwap fee distributor. THORName 't' shares BTC address with '-_'. Same entity."},
+                  {"address": "0x90A48D5CF7343B08dA12E067680B4C6dbfE551Be", "label": "ShapeShift DAO Treasury", "direction": "Related", "total": 0, "pct": 0, "notes": "THORName 'ss'. NOT SwapKit (initially suspected)."}
+              ],
+              "estimates": [
+                  {"month": "2025-04", "volume": 957954091, "est10": 95795, "est15": 143693, "actual": 0},
+                  {"month": "2025-05", "volume": 1664161285, "est10": 166416, "est15": 249624, "actual": 0},
+                  {"month": "2025-06", "volume": 2083336744, "est10": 208334, "est15": 312501, "actual": 0},
+                  {"month": "2025-07", "volume": 1754826611, "est10": 175483, "est15": 263224, "actual": 0},
+                  {"month": "2025-08", "volume": 2504055143, "est10": 250406, "est15": 375608, "actual": 0},
+                  {"month": "2025-09", "volume": 2653272362, "est10": 265327, "est15": 397991, "actual": 0},
+                  {"month": "2025-11", "volume": 7247841510, "est10": 724784, "est15": 1087176, "actual": 0}
+              ],
+              "risks": [
+                  {"severity": "high", "text": "<strong>THORChain Router revenue collapsed:</strong> Direct affiliate payouts declined ~90% from peak. Replaced by unidentified SafeProxy sources."},
+                  {"severity": "high", "text": "<strong>Majority of inflows from unidentified sources:</strong> SafeProxy multi-sigs and unlabeled EOAs provide bulk of revenue. Cannot verify these are protocol fees vs. treasury transfers."},
+                  {"severity": "high", "text": "<strong>Self-reported volume overstates actual revenue:</strong> Nov 2025 actual USDC inflows were ~39% of the 10bps revenue estimate. Suggests volume inflation, double-counting, or much lower effective fee rate."},
+                  {"severity": "medium", "text": "<strong>85%+ of outflows to single Kraken-funded EOA:</strong> Centralized cash extraction to likely one individual. No visible treasury diversification."},
+                  {"severity": "medium", "text": "<strong>ETH mainnet USDC only:</strong> Does not capture BTC affiliate payouts, direct ETH received, or revenue on other chains. Actual revenue could be higher."},
+                  {"severity": "medium", "text": "<strong>Periodic large spikes from unknown sources:</strong> Large SafeProxy transfers may represent batched fee releases rather than steady revenue."},
+                  {"severity": "low", "text": "<strong>THORChain/NK exposure:</strong> THORChain cited for facilitating North Korean fund laundering. SwapKit is a major THORChain affiliate — reputational and regulatory risk."},
+                  {"severity": "low", "text": "<strong>Shared infrastructure with THORSwap:</strong> THORName '-_' shares BTC payout address with THORName 't' (THORSwap). Revenue attribution may be blurred."}
+              ]
+          }
+
+          # Fill in actual values for estimates from monthly data
+          monthly_lookup = {m["month"]: m["usdcIn"] for m in monthly_list}
+          for e in new_data["estimates"]:
+              e["actual"] = monthly_lookup.get(e["month"], 0)
+
+          # Read index.html and replace DATA block
+          with open("index.html", "r") as f:
+              content = f.read()
+
+          data_json = json.dumps(new_data, indent=2)
+          pattern = r"// __DATA_START__\n.*?// __DATA_END__"
+          replacement = f"// __DATA_START__\nconst DATA = {data_json};\n// __DATA_END__"
+          new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+          with open("index.html", "w") as f:
+              f.write(new_content)
+
+          print(f"Data updated: {len(monthly_list)} months, {len(unique)} txs, balance: ${current_balance:,}")
+          PYEOF
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet || (git commit -m "Update revenue data $(date -u +%Y-%m-%d)" && git push)
