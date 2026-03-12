@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwapKit Revenue Analysis — Onchain DD</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #f0883e;
+  --accent2: #da3633;
+  --green: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.5; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+h1 { font-size: 28px; margin-bottom: 4px; }
+h2 { font-size: 20px; margin: 32px 0 16px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+h3 { font-size: 16px; margin: 16px 0 8px; color: var(--text-muted); }
+.subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+.subtitle a { color: var(--blue); text-decoration: none; }
+.subtitle a:hover { text-decoration: underline; }
+.mono { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 13px; }
+
+/* Stats Cards */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.stat-card .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 24px; font-weight: 700; font-family: 'SF Mono', monospace; margin-top: 4px; }
+.stat-card .value.green { color: var(--green); }
+.stat-card .value.accent { color: var(--accent); }
+.stat-card .value.blue { color: var(--blue); }
+.stat-card .value.red { color: var(--red); }
+.stat-card .detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* Chart */
+.chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 32px; }
+canvas { width: 100%; height: 300px; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; margin-bottom: 32px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: 'SF Mono', monospace; }
+thead th { background: var(--surface); border: 1px solid var(--border); padding: 8px 12px; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); position: sticky; top: 0; }
+thead th:hover { color: var(--accent); }
+tbody td { border: 1px solid var(--border); padding: 6px 12px; white-space: nowrap; }
+tbody tr:hover { background: rgba(240,136,62,0.05); }
+.num { text-align: right; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.warn { color: var(--accent); }
+.muted { color: var(--text-muted); }
+.addr { font-size: 12px; }
+.addr a { color: var(--blue); text-decoration: none; }
+.addr a:hover { text-decoration: underline; }
+.tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.tag-green { background: rgba(63,185,80,0.15); color: var(--green); }
+.tag-red { background: rgba(248,81,73,0.15); color: var(--red); }
+.tag-orange { background: rgba(240,136,62,0.15); color: var(--accent); }
+.tag-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+.tag-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+
+/* Risk Flags */
+.risk-flags { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 32px; }
+.risk-item { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start; }
+.risk-item:last-child { border-bottom: none; }
+.risk-icon { font-size: 14px; flex-shrink: 0; min-width: 60px; text-align: center; }
+.risk-text { font-size: 13px; }
+.risk-text strong { color: var(--accent); }
+
+/* Methodology */
+.methodology { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 12px; color: var(--text-muted); }
+.methodology a { color: var(--blue); text-decoration: none; }
+.methodology a:hover { text-decoration: underline; }
+
+/* Update button */
+.update-section { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+.btn { background: var(--accent); color: #fff; border: none; padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn:hover { opacity: 0.9; }
+.btn-muted { background: var(--border); }
+.update-note { font-size: 12px; color: var(--text-muted); }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.tab { padding: 8px 16px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-muted); }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+@media (max-width: 768px) {
+  .container { padding: 12px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat-card .value { font-size: 18px; }
+  table { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>SwapKit Revenue Analysis</h1>
+<p class="subtitle">
+  Onchain due diligence — USDC flows to wallet
+  <a href="https://etherscan.io/address/0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4" target="_blank" class="mono">0x2D4f...9bb4</a>
+  (THORName: <strong>-_</strong>) &middot; ETH mainnet only &middot; Last updated: <span id="lastUpdated"></span>
+</p>
+
+<div class="update-section">
+  <a class="btn" href="https://github.com/Pebs98/swapkit-revenue/actions/workflows/update-data.yml" target="_blank">Update Data via GitHub Actions</a>
+  <span class="update-note">Triggers a workflow that fetches fresh Blockscout data and redeploys.</span>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats" id="statsCards"></div>
+
+<!-- Chart -->
+<h2>Monthly USDC Flows</h2>
+<div class="chart-container">
+  <canvas id="chart"></canvas>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" data-tab="monthly">Monthly Revenue</div>
+  <div class="tab" data-tab="outflows">Wallet Outflows</div>
+  <div class="tab" data-tab="addresses">Notable Addresses</div>
+  <div class="tab" data-tab="sources">Inflow Sources</div>
+  <div class="tab" data-tab="estimates">Estimates vs Actual</div>
+</div>
+
+<!-- Tab: Monthly Revenue -->
+<div class="tab-content active" id="tab-monthly">
+  <div class="table-wrap">
+    <table id="monthlyTable">
+      <thead>
+        <tr>
+          <th>Month</th><th>USDC IN</th><th>USDC OUT</th><th>Net</th>
+          <th>THORChain Router</th><th>Chainflip</th><th>Other/Unknown</th><th># IN Txs</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Outflows -->
+<div class="tab-content" id="tab-outflows">
+  <h3>Outflow Destination Summary</h3>
+  <div class="table-wrap">
+    <table id="outflowTable">
+      <thead>
+        <tr>
+          <th>Recipient</th><th>Label</th><th>Total USDC</th><th># Txs</th><th>% of Outflows</th><th>Type</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Notable Addresses -->
+<div class="tab-content" id="tab-addresses">
+  <div class="table-wrap">
+    <table id="addressTable">
+      <thead>
+        <tr>
+          <th>Address</th><th>Label</th><th>Direction</th><th>Total USDC</th><th>% of Flow</th><th>Notes</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Inflow Sources -->
+<div class="tab-content" id="tab-sources">
+  <div class="table-wrap">
+    <table id="sourceTable">
+      <thead>
+        <tr>
+          <th>Source Address</th><th>Label</th><th>Total USDC</th><th>% of Inflows</th><th>Identified?</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Estimates vs Actual -->
+<div class="tab-content" id="tab-estimates">
+  <h3>SwapKit Self-Reported Volume vs Actual USDC Inflows</h3>
+  <div class="table-wrap">
+    <table id="estimateTable">
+      <thead>
+        <tr>
+          <th>Month</th><th>Reported Volume</th><th>Est Rev (10bps)</th><th>Est Rev (15bps)</th>
+          <th>Actual USDC IN</th><th>Actual / 10bps</th><th>Actual / 15bps</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Risk Flags -->
+<h2>Risk Flags</h2>
+<div class="risk-flags" id="riskFlags"></div>
+
+<!-- Methodology -->
+<h2>Methodology &amp; Sources</h2>
+<div class="methodology">
+  <p><strong>Target wallet:</strong> <a href="https://etherscan.io/address/0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4" target="_blank">0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4</a></p>
+  <p><strong>THORName:</strong> <code>-_</code> (confirmed via <a href="https://midgard.ninerealms.com/v2/thorname/rlookup/0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4" target="_blank">Midgard reverse lookup</a>)</p>
+  <p><strong>Preferred payout asset:</strong> ETH.USDC</p>
+  <p><strong>THORNode:</strong> <a href="https://thornode.ninerealms.com/thorchain/thorname/-_" target="_blank">thornode.ninerealms.com/thorchain/thorname/-_</a></p>
+  <p><strong>Data source:</strong> <a href="https://eth.blockscout.com/api" target="_blank">Blockscout Ethereum API</a> — ERC-20 token transfers for USDC (0xa0b8...eb48)</p>
+  <p><strong>Scope:</strong> ETH mainnet USDC only. Does not capture BTC affiliate payouts (THORName BTC alias: bc1qrutr...), direct ETH payouts, or revenue on other chains.</p>
+  <p><strong>Cross-reference:</strong> THORName <code>-_</code> shares BTC payout address with THORName <code>t</code> (THORSwap's <a href="https://etherscan.io/address/0x6d1eff1aFF1dc9978d851D09d9d15f2938Da7BD7" target="_blank">TSFeeDistributor_V5</a>) — same parent entity.</p>
+  <p style="margin-top:12px"><strong>Block explorers:</strong>
+    <a href="https://etherscan.io/address/0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4" target="_blank">Etherscan</a> &middot;
+    <a href="https://runescan.io/" target="_blank">RuneScan</a> &middot;
+    <a href="https://eth.blockscout.com/address/0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4" target="_blank">Blockscout</a>
+  </p>
+</div>
+
+<p style="margin-top:24px; font-size:11px; color:var(--text-muted); text-align:center;">
+  Built for acquisition DD. Data is onchain and verifiable. Not financial advice.
+</p>
+
+</div>
+
+<script>
+// __DATA_START__
+const DATA = {
+  lastUpdated: "2026-03-12",
+  wallet: "0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4",
+  thorname: "-_",
+  currentBalance: 739951,
+  totalTxs: 4611,
+  monthly: [
+    { month: "2024-11", usdcIn: 52345, usdcOut: 0, thorchain: 52345, chainflip: 0, other: 0, inTxs: 28 },
+    { month: "2024-12", usdcIn: 130707, usdcOut: 178255, thorchain: 130707, chainflip: 0, other: 0, inTxs: 62 },
+    { month: "2025-01", usdcIn: 275438, usdcOut: 212462, thorchain: 159190, chainflip: 0, other: 116247, inTxs: 112 },
+    { month: "2025-02", usdcIn: 203455, usdcOut: 187250, thorchain: 146365, chainflip: 0, other: 57089, inTxs: 218 },
+    { month: "2025-03", usdcIn: 290026, usdcOut: 301300, thorchain: 259611, chainflip: 0, other: 30414, inTxs: 546 },
+    { month: "2025-04", usdcIn: 110834, usdcOut: 171950, thorchain: 76876, chainflip: 2987, other: 30971, inTxs: 249 },
+    { month: "2025-05", usdcIn: 235004, usdcOut: 205101, thorchain: 111796, chainflip: 63004, other: 60204, inTxs: 276 },
+    { month: "2025-06", usdcIn: 208480, usdcOut: 231437, thorchain: 149838, chainflip: 15781, other: 42861, inTxs: 282 },
+    { month: "2025-07", usdcIn: 121039, usdcOut: 134571, thorchain: 47914, chainflip: 10482, other: 62643, inTxs: 131 },
+    { month: "2025-08", usdcIn: 145536, usdcOut: 125250, thorchain: 58867, chainflip: 17542, other: 69126, inTxs: 157 },
+    { month: "2025-09", usdcIn: 225076, usdcOut: 243391, thorchain: 64635, chainflip: 16317, other: 144124, inTxs: 218 },
+    { month: "2025-10", usdcIn: 267761, usdcOut: 220236, thorchain: 69461, chainflip: 22545, other: 175755, inTxs: 236 },
+    { month: "2025-11", usdcIn: 284636, usdcOut: 333456, thorchain: 33154, chainflip: 25639, other: 225844, inTxs: 188 },
+    { month: "2025-12", usdcIn: 767662, usdcOut: 634576, thorchain: 24573, chainflip: 9606, other: 733483, inTxs: 490 },
+    { month: "2026-01", usdcIn: 229804, usdcOut: 212188, thorchain: 0, chainflip: 0, other: 229804, inTxs: 57 },
+    { month: "2026-02", usdcIn: 328982, usdcOut: 311650, thorchain: 0, chainflip: 0, other: 328982, inTxs: 0 },
+    { month: "2026-03", usdcIn: 566239, usdcOut: 0, thorchain: 0, chainflip: 0, other: 566239, inTxs: 0 }
+  ],
+  outflows: [
+    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Unlabeled EOA (funded from Kraken)", total: 2711322, txs: 33, pct: 85.3, type: "Cash-out" },
+    { address: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", label: "LI.FI Diamond", total: 103584, txs: 2, pct: 3.3, type: "DEX Aggregator" },
+    { address: "0x78c365c87fa724fe551b48ce472d832f9fb3c421", label: "Unlabeled", total: 96920, txs: 1, pct: 3.0, type: "Transfer" },
+    { address: "0x255Ba52b374c4Cf14b36966Bf53A8a89ae615CEf", label: "Unlabeled", total: 57500, txs: 4, pct: 1.8, type: "Transfer" },
+    { address: "0xC2C5E719B2fAe1C0560D4deea738F27574bFfD91", label: "Unlabeled", total: 50516, txs: 1, pct: 1.6, type: "Transfer" },
+    { address: "0xcc16b97C3516e5600445921C23a0d50e41b96E2d", label: "Unlabeled", total: 50000, txs: 1, pct: 1.6, type: "Transfer" },
+    { address: "0xd59dE8dCDC2101F7b1A69d3107D3AfEd1542212A", label: "Unlabeled", total: 22950, txs: 2, pct: 0.7, type: "Transfer" },
+    { address: "0xC0af13c49EB2616455469b00B7bdD1A64AcA1A6f", label: "Unlabeled", total: 16000, txs: 1, pct: 0.5, type: "Transfer" },
+    { address: "0xe9bDc2cEa4eF6dF4CDb3F76936B717e065D482B5", label: "Unlabeled", total: 15000, txs: 1, pct: 0.5, type: "Transfer" },
+    { address: "0xa1A75324Ea9FC07FCC759DF7685f4B9024f24bf6", label: "Unlabeled", total: 10000, txs: 1, pct: 0.3, type: "Transfer" },
+    { address: "0x63713Ec54Af592a7ba9d762d5FdF1D383B4eFF5A", label: "Unlabeled", total: 9935, txs: 6, pct: 0.3, type: "Transfer" },
+    { address: "0xaa18DFfA293C26EB7E4c9B42D11756fBfB588703", label: "Unlabeled", total: 7921, txs: 1, pct: 0.2, type: "Transfer" },
+    { address: "0xC85feF7A1B039A9E080Aadf80Ff6F1536DaDa088", label: "Unlabeled", total: 6940, txs: 1, pct: 0.2, type: "Transfer" },
+    { address: "0xa052DdF1c1739419B90fB7BF722843aD3e63114b", label: "Unlabeled", total: 6450, txs: 2, pct: 0.2, type: "Transfer" },
+    { address: "0x1DD0b5e127e31516F1e32F66a040eFB19f3c6c41", label: "Unlabeled", total: 4500, txs: 1, pct: 0.1, type: "Transfer" }
+  ],
+  inflows: [
+    { address: "0xD37BbE5744D730a1d98d8DC97c42F0Ca46aD7146", label: "THORChain Router v4.1.1", total: 1385385, pct: 41.8, identified: true },
+    { address: "0xD0bDf7397C6E90879Bf1a409714D1CFEe597D121", label: "SafeProxy (unlabeled multi-sig)", total: 540603, pct: 16.3, identified: false },
+    { address: "0x92f980a7aaE3574cfE45E30A21D6aa14D08f7c7D", label: "SafeProxy (unlabeled multi-sig)", total: 490891, pct: 14.8, identified: false },
+    { address: "0xa4c737F10010A80cC05112523663b5C7fc97Ab39", label: "Unlabeled EOA (high activity)", total: 444044, pct: 13.4, identified: false },
+    { address: "0x2CfF890f0378a11913B6129B2E97417A2c302680", label: "Unlabeled EOA ($14.9M portfolio)", total: 187492, pct: 5.7, identified: false },
+    { address: "0xF5e10380213880111522dd0efD3dbb45b9f62bcc", label: "Chainflip 1", total: 183903, pct: 5.5, identified: true },
+    { address: "0x63713Ec54Af592a7ba9d762d5FdF1D383B4eFF5A", label: "Unlabeled", total: 45176, pct: 1.4, identified: false },
+    { address: "0xe3985e6b61b814f7cdb188766562ba71b446b46d", label: "Unlabeled", total: 16595, pct: 0.5, identified: false },
+    { address: "0xc510d02cee9ef8d9bfb880b212ff0e3a5c46a6be", label: "Unlabeled", total: 13167, pct: 0.4, identified: false }
+  ],
+  addresses: [
+    { address: "0x2D4f72825c5908b6fcA5a624F1B412b6E1D79bb4", label: "SwapKit Revenue Wallet", direction: "Subject", total: 4443024, pct: 100, notes: "THORName: -_ | Preferred asset: USDC | ETH alias" },
+    { address: "0xD37BbE5744D730a1d98d8DC97c42F0Ca46aD7146", label: "THORChain Router v4.1.1", direction: "Inflow", total: 1385385, pct: 41.8, notes: "Confirmed affiliate fee payouts in USDC" },
+    { address: "0xF5e10380213880111522dd0efD3dbb45b9f62bcc", label: "Chainflip 1", direction: "Inflow", total: 183903, pct: 5.5, notes: "Chainflip broker fee payouts (USDC + 34 ETH in Jan 2026)" },
+    { address: "0xD0bDf7397C6E90879Bf1a409714D1CFEe597D121", label: "SafeProxy (unknown)", direction: "Inflow", total: 540603, pct: 16.3, notes: "Multi-sig holding $632K USDC. Fed by 2 addresses. Not publicly labeled." },
+    { address: "0x92f980a7aaE3574cfE45E30A21D6aa14D08f7c7D", label: "SafeProxy (unknown)", direction: "Inflow", total: 490891, pct: 14.8, notes: "Multi-sig holding $3.09M. Not publicly labeled." },
+    { address: "0xa4c737F10010A80cC05112523663b5C7fc97Ab39", label: "Unlabeled EOA", direction: "Inflow", total: 444044, pct: 13.4, notes: "High-activity EOA. Source of funds unverified." },
+    { address: "0x82137fBeB0Cf695b6dA983064d4F2d7F7c6Ee2e4", label: "Primary cash-out EOA", direction: "Outflow", total: 2711322, pct: 85.3, notes: "85% of all outflows. Funded from Kraken. 7 ETH txs. Likely team/founder wallet." },
+    { address: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", label: "LI.FI Diamond", direction: "Outflow", total: 103584, pct: 3.3, notes: "DEX aggregator contract. Possibly operational swaps." },
+    { address: "0x6d1eff1aFF1dc9978d851D09d9d15f2938Da7BD7", label: "TSFeeDistributor_V5", direction: "Related", total: 0, pct: 0, notes: "THORSwap fee distributor. THORName 't' shares BTC address with '-_'. Same entity." },
+    { address: "0x90A48D5CF7343B08dA12E067680B4C6dbfE551Be", label: "ShapeShift DAO Treasury", direction: "Related", total: 0, pct: 0, notes: "THORName 'ss'. NOT SwapKit (initially suspected)." }
+  ],
+  estimates: [
+    { month: "2025-04", volume: 957954091, est10: 95795, est15: 143693, actual: 110834 },
+    { month: "2025-05", volume: 1664161285, est10: 166416, est15: 249624, actual: 235004 },
+    { month: "2025-06", volume: 2083336744, est10: 208334, est15: 312501, actual: 208480 },
+    { month: "2025-07", volume: 1754826611, est10: 175483, est15: 263224, actual: 121039 },
+    { month: "2025-08", volume: 2504055143, est10: 250406, est15: 375608, actual: 145536 },
+    { month: "2025-09", volume: 2653272362, est10: 265327, est15: 397991, actual: 225076 },
+    { month: "2025-11", volume: 7247841510, est10: 724784, est15: 1087176, actual: 284636 }
+  ],
+  risks: [
+    { severity: "high", text: "<strong>THORChain Router revenue collapsed:</strong> $260K/month (Mar 2025) to $25K/month (Dec 2025) — 90% decline. Replaced by unidentified SafeProxy sources." },
+    { severity: "high", text: "<strong>52.7% of inflows from unidentified sources:</strong> Two SafeProxy multi-sigs and an unlabeled EOA provide the majority of revenue. Cannot verify these are protocol fees vs. treasury transfers." },
+    { severity: "high", text: "<strong>Nov 2025 actual = 39% of 10bps estimate:</strong> Self-reported $725M volume implies $725K revenue at 10bps, but only $285K arrived onchain. Suggests volume inflation, double-counting, or much lower effective fee rate." },
+    { severity: "medium", text: "<strong>85% of outflows to single Kraken-funded EOA:</strong> Indicates centralized cash extraction to likely one individual. No visible treasury diversification or operational reserves." },
+    { severity: "medium", text: "<strong>ETH mainnet USDC only:</strong> This analysis does not capture BTC affiliate payouts, direct ETH received (~34 ETH from Chainflip), or any revenue on Arbitrum, Solana, or other chains. Actual revenue could be higher." },
+    { severity: "medium", text: "<strong>Dec 2025 spike ($768K) anomalous:</strong> $733K from unknown SafeProxy in single month — could be accumulated fees released in batch rather than steady revenue." },
+    { severity: "low", text: "<strong>THORChain/NK exposure:</strong> THORChain has been cited for facilitating North Korean fund laundering to boost TVL. SwapKit is a major THORChain affiliate — reputational and regulatory risk." },
+    { severity: "low", text: "<strong>Shared infrastructure with THORSwap:</strong> THORName '-_' shares BTC payout address with THORName 't' (THORSwap). Same parent entity. Revenue attribution between SwapKit SDK fees and THORSwap DEX fees may be blurred." }
+  ]
+};
+// __DATA_END__
+
+// --- Render Functions ---
+
+function fmt(n) {
+  if (n === 0) return '$0';
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+  return '$' + n.toFixed(0);
+}
+
+function fmtFull(n) {
+  return '$' + n.toLocaleString('en-US', {maximumFractionDigits: 0});
+}
+
+function fmtVol(n) {
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  return '$' + n.toLocaleString('en-US', {maximumFractionDigits: 0});
+}
+
+function shortAddr(a) {
+  return a.slice(0,6) + '...' + a.slice(-4);
+}
+
+function etherscanLink(a) {
+  return `<a href="https://etherscan.io/address/${a}" target="_blank">${shortAddr(a)}</a>`;
+}
+
+function numClass(n) {
+  if (n > 0) return 'num pos';
+  if (n < 0) return 'num neg';
+  return 'num muted';
+}
+
+function severityTag(s) {
+  const colors = { high: 'red', medium: 'orange', low: 'blue' };
+  return `<span class="tag tag-${colors[s]}">${s.toUpperCase()}</span>`;
+}
+
+function identifiedTag(b) {
+  return b ? '<span class="tag tag-green">YES</span>' : '<span class="tag tag-red">NO</span>';
+}
+
+// Stats
+function renderStats() {
+  const totalIn = DATA.monthly.reduce((s,m) => s + m.usdcIn, 0);
+  const totalOut = DATA.monthly.reduce((s,m) => s + m.usdcOut, 0);
+  const months = DATA.monthly.length;
+  const avgIn = totalIn / months;
+  const html = `
+    <div class="stat-card"><div class="label">Total USDC Inflows</div><div class="value green">${fmtFull(totalIn)}</div><div class="detail">${months} months tracked (Nov 2024 – present)</div></div>
+    <div class="stat-card"><div class="label">Total USDC Outflows</div><div class="value red">${fmtFull(totalOut)}</div><div class="detail">85.3% to single Kraken-funded EOA</div></div>
+    <div class="stat-card"><div class="label">Current USDC Balance</div><div class="value accent">${fmtFull(DATA.currentBalance)}</div><div class="detail">Net retained in wallet</div></div>
+    <div class="stat-card"><div class="label">Monthly Average Inflow</div><div class="value blue">${fmtFull(Math.round(avgIn))}</div><div class="detail">Median: ${fmtFull(DATA.monthly.map(m=>m.usdcIn).sort((a,b)=>a-b)[Math.floor(months/2)])}</div></div>
+  `;
+  document.getElementById('statsCards').innerHTML = html;
+  document.getElementById('lastUpdated').textContent = DATA.lastUpdated;
+}
+
+// Chart
+function renderChart() {
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 300 * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '300px';
+  ctx.scale(dpr, dpr);
+
+  const W = rect.width;
+  const H = 300;
+  const pad = { top: 20, right: 20, bottom: 50, left: 70 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  const months = DATA.monthly;
+  const maxVal = Math.max(...months.map(m => Math.max(m.usdcIn, m.usdcOut))) * 1.1;
+  const barW = (cw / months.length) * 0.35;
+  const gap = cw / months.length;
+
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + ch - (ch * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px SF Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(maxVal * i / 4), pad.left - 8, y + 4);
+  }
+
+  // Bars
+  months.forEach((m, i) => {
+    const x = pad.left + i * gap + gap * 0.15;
+    const hIn = (m.usdcIn / maxVal) * ch;
+    const hOut = (m.usdcOut / maxVal) * ch;
+
+    // Inflow bar
+    ctx.fillStyle = '#3fb950';
+    ctx.fillRect(x, pad.top + ch - hIn, barW, hIn);
+
+    // Outflow bar
+    ctx.fillStyle = '#f85149';
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(x + barW + 2, pad.top + ch - hOut, barW, hOut);
+    ctx.globalAlpha = 1;
+
+    // Label
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '10px SF Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate(x + barW, H - pad.bottom + 14);
+    ctx.rotate(-0.5);
+    ctx.fillText(m.month, 0, 0);
+    ctx.restore();
+  });
+
+  // Legend
+  ctx.fillStyle = '#3fb950';
+  ctx.fillRect(W - 180, 8, 12, 12);
+  ctx.fillStyle = '#e6edf3';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('USDC In', W - 164, 18);
+
+  ctx.fillStyle = '#f85149';
+  ctx.globalAlpha = 0.7;
+  ctx.fillRect(W - 100, 8, 12, 12);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#e6edf3';
+  ctx.fillText('USDC Out', W - 84, 18);
+}
+
+// Monthly Table
+function renderMonthly() {
+  const tbody = document.querySelector('#monthlyTable tbody');
+  let totalIn = 0, totalOut = 0, totalTc = 0, totalCf = 0, totalOth = 0, totalTxs = 0;
+  let html = '';
+  DATA.monthly.forEach(m => {
+    const net = m.usdcIn - m.usdcOut;
+    totalIn += m.usdcIn; totalOut += m.usdcOut;
+    totalTc += m.thorchain; totalCf += m.chainflip; totalOth += m.other; totalTxs += m.inTxs;
+    html += `<tr>
+      <td>${m.month}</td>
+      <td class="num pos">${fmtFull(m.usdcIn)}</td>
+      <td class="num red">${m.usdcOut ? fmtFull(m.usdcOut) : '-'}</td>
+      <td class="${numClass(net)}">${net >= 0 ? '+' : ''}${fmtFull(net)}</td>
+      <td class="num">${m.thorchain ? fmtFull(m.thorchain) : '<span class="muted">-</span>'}</td>
+      <td class="num">${m.chainflip ? fmtFull(m.chainflip) : '<span class="muted">-</span>'}</td>
+      <td class="num ${m.other > m.thorchain + m.chainflip ? 'warn' : ''}">${m.other ? fmtFull(m.other) : '<span class="muted">-</span>'}</td>
+      <td class="num">${m.inTxs || '<span class="muted">-</span>'}</td>
+    </tr>`;
+  });
+  const netTotal = totalIn - totalOut;
+  html += `<tr style="font-weight:700;background:var(--surface)">
+    <td>TOTAL</td>
+    <td class="num pos">${fmtFull(totalIn)}</td>
+    <td class="num red">${fmtFull(totalOut)}</td>
+    <td class="${numClass(netTotal)}">${netTotal >= 0 ? '+' : ''}${fmtFull(netTotal)}</td>
+    <td class="num">${fmtFull(totalTc)}</td>
+    <td class="num">${fmtFull(totalCf)}</td>
+    <td class="num warn">${fmtFull(totalOth)}</td>
+    <td class="num">${totalTxs}</td>
+  </tr>`;
+  tbody.innerHTML = html;
+}
+
+// Outflows
+function renderOutflows() {
+  const tbody = document.querySelector('#outflowTable tbody');
+  let html = '';
+  DATA.outflows.forEach(o => {
+    html += `<tr>
+      <td class="addr">${etherscanLink(o.address)}</td>
+      <td>${o.label}</td>
+      <td class="num">${fmtFull(o.total)}</td>
+      <td class="num">${o.txs}</td>
+      <td class="num">${o.pct.toFixed(1)}%</td>
+      <td><span class="tag tag-${o.type === 'Cash-out' ? 'red' : o.type === 'DEX Aggregator' ? 'purple' : 'blue'}">${o.type}</span></td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+// Inflow Sources
+function renderSources() {
+  const tbody = document.querySelector('#sourceTable tbody');
+  let html = '';
+  DATA.inflows.forEach(s => {
+    html += `<tr>
+      <td class="addr">${etherscanLink(s.address)}</td>
+      <td>${s.label}</td>
+      <td class="num">${fmtFull(s.total)}</td>
+      <td class="num">${s.pct.toFixed(1)}%</td>
+      <td>${identifiedTag(s.identified)}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+// Notable Addresses
+function renderAddresses() {
+  const tbody = document.querySelector('#addressTable tbody');
+  let html = '';
+  DATA.addresses.forEach(a => {
+    const dirTag = {
+      'Subject': 'tag-accent tag-orange',
+      'Inflow': 'tag-green',
+      'Outflow': 'tag-red',
+      'Related': 'tag-purple'
+    }[a.direction] || 'tag-blue';
+    html += `<tr>
+      <td class="addr">${etherscanLink(a.address)}</td>
+      <td>${a.label}</td>
+      <td><span class="tag ${dirTag}">${a.direction}</span></td>
+      <td class="num">${a.total ? fmtFull(a.total) : '-'}</td>
+      <td class="num">${a.pct ? a.pct.toFixed(1) + '%' : '-'}</td>
+      <td style="white-space:normal;max-width:300px;font-size:11px">${a.notes}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+// Estimates
+function renderEstimates() {
+  const tbody = document.querySelector('#estimateTable tbody');
+  let html = '';
+  DATA.estimates.forEach(e => {
+    const ratio10 = (e.actual / e.est10 * 100).toFixed(0);
+    const ratio15 = (e.actual / e.est15 * 100).toFixed(0);
+    const r10class = ratio10 < 70 ? 'neg' : ratio10 < 90 ? 'warn' : 'pos';
+    const r15class = ratio15 < 70 ? 'neg' : ratio15 < 90 ? 'warn' : 'pos';
+    html += `<tr>
+      <td>${e.month}</td>
+      <td class="num">${fmtVol(e.volume)}</td>
+      <td class="num">${fmtFull(e.est10)}</td>
+      <td class="num">${fmtFull(e.est15)}</td>
+      <td class="num pos">${fmtFull(e.actual)}</td>
+      <td class="num ${r10class}">${ratio10}%</td>
+      <td class="num ${r15class}">${ratio15}%</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+// Risk Flags
+function renderRisks() {
+  const el = document.getElementById('riskFlags');
+  let html = '';
+  DATA.risks.forEach(r => {
+    html += `<div class="risk-item">
+      <div class="risk-icon">${severityTag(r.severity)}</div>
+      <div class="risk-text">${r.text}</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Sort tables
+document.querySelectorAll('table thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const table = th.closest('table');
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr')).filter(r => !r.style.fontWeight);
+    const idx = Array.from(th.parentNode.children).indexOf(th);
+    const asc = th.dataset.sort !== 'asc';
+    th.parentNode.querySelectorAll('th').forEach(h => delete h.dataset.sort);
+    th.dataset.sort = asc ? 'asc' : 'desc';
+    rows.sort((a, b) => {
+      let va = a.children[idx]?.textContent.replace(/[$,%+]/g, '').trim() || '';
+      let vb = b.children[idx]?.textContent.replace(/[$,%+]/g, '').trim() || '';
+      const na = parseFloat(va.replace(/,/g, ''));
+      const nb = parseFloat(vb.replace(/,/g, ''));
+      if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+      return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+    const totalRow = tbody.querySelector('tr[style]');
+    rows.forEach(r => tbody.appendChild(r));
+    if (totalRow) tbody.appendChild(totalRow);
+  });
+});
+
+// Init
+renderStats();
+renderChart();
+renderMonthly();
+renderOutflows();
+renderSources();
+renderAddresses();
+renderEstimates();
+renderRisks();
+window.addEventListener('resize', renderChart);
+</script>
+</body>
+</html>
